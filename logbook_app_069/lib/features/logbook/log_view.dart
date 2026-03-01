@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:logbook_app_069/features/logbook/log_controller.dart';
 import 'package:logbook_app_069/features/logbook/models/log_model.dart';
@@ -49,6 +50,8 @@ class _CounterViewState extends State<CounterView> {
   late Future<List<LogModel>> _logsFuture;
   String _currentQuery = '';
 
+  static const Duration _kMinLoadingDebug = Duration(seconds: 2);
+
   @override
   void initState() {
     super.initState();
@@ -59,25 +62,45 @@ class _CounterViewState extends State<CounterView> {
   }
 
   Future<List<LogModel>> _fetchLogs() async {
+    final stopwatch = Stopwatch()..start();
+
     await LogHelper.writeLog(
       "UI: Memulai fetch data dari Cloud...",
       source: "log_view.dart",
       level: 2,
     );
 
-    final logs = await MongoService().getLogs();
+    try {
+      final logs = await MongoService().getLogs();
 
-    // Update state reaktif (header/search) tanpa mengubah struktur UI besar
-    _controller.logsNotifier.value = logs;
-    _controller.searchLog(_currentQuery);
+      // Update state reaktif (header/search) tanpa mengubah struktur UI besar
+      _controller.logsNotifier.value = logs;
+      _controller.searchLog(_currentQuery);
 
-    await LogHelper.writeLog(
-      "UI: Fetch selesai (${logs.length} data)",
-      source: "log_view.dart",
-      level: 2,
-    );
+      await LogHelper.writeLog(
+        "UI: Fetch selesai (${logs.length} data)",
+        source: "log_view.dart",
+        level: 2,
+      );
 
-    return logs;
+      return logs;
+    } catch (e) {
+      await LogHelper.writeLog(
+        "UI: Fetch gagal ($e)",
+        source: "log_view.dart",
+        level: 1,
+      );
+      rethrow;
+    } finally {
+      // Agar loading state terlihat saat demo/screenshot (Task 3),
+      // tahan minimal durasi tertentu di mode debug, meskipun fetch sangat cepat.
+      if (kDebugMode) {
+        final remaining = _kMinLoadingDebug - stopwatch.elapsed;
+        if (!remaining.isNegative) {
+          await Future<void>.delayed(remaining);
+        }
+      }
+    }
   }
 
   void _refreshLogs() {
