@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -49,6 +52,8 @@ class _CounterViewState extends State<CounterView> {
   final TextEditingController _contentController = TextEditingController();
   late Future<List<LogModel>> _logsFuture;
   String _currentQuery = '';
+  bool _isOffline = false;
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
 
   static const Duration _kMinLoadingDebug = Duration(seconds: 2);
 
@@ -97,6 +102,24 @@ class _CounterViewState extends State<CounterView> {
     }
   }
 
+  Future<void> _initConnectivity() async {
+    final initial = await Connectivity().checkConnectivity();
+    final offline = initial == ConnectivityResult.none;
+    if (mounted && offline != _isOffline) {
+      setState(() => _isOffline = offline);
+    }
+
+    _connSub = Connectivity().onConnectivityChanged.listen((results) {
+      final nowOffline = results.every((r) => r == ConnectivityResult.none);
+      if (mounted && nowOffline != _isOffline) {
+        setState(() => _isOffline = nowOffline);
+        if (!nowOffline) {
+          _refreshLogs();
+        }
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -104,6 +127,9 @@ class _CounterViewState extends State<CounterView> {
 
     // Future-based fetch untuk menangani latensi Cloud
     _logsFuture = _fetchLogs();
+
+    // Pantau konektivitas agar offline warning muncul walau user masih di layar list
+    _initConnectivity();
   }
 
   Future<List<LogModel>> _fetchLogs() async {
@@ -118,6 +144,10 @@ class _CounterViewState extends State<CounterView> {
     try {
       final logs = await MongoService().getLogs();
 
+      if (_isOffline) {
+        setState(() => _isOffline = false);
+      }
+
       _controller.logsNotifier.value = logs;
       _controller.searchLog(_currentQuery);
 
@@ -129,6 +159,9 @@ class _CounterViewState extends State<CounterView> {
 
       return logs;
     } catch (e) {
+      if (!_isOffline) {
+        setState(() => _isOffline = true);
+      }
       await LogHelper.writeLog(
         "UI: Fetch gagal ($e)",
         source: "log_view.dart",
@@ -150,6 +183,14 @@ class _CounterViewState extends State<CounterView> {
     setState(() {
       _logsFuture = _fetchLogs();
     });
+  }
+
+  @override
+  void dispose() {
+    _connSub?.cancel();
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
   }
 
   String _getTimeGreeting() {
@@ -519,8 +560,12 @@ class _CounterViewState extends State<CounterView> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
+          Padding(
+            padding: EdgeInsets.only(top: _isOffline ? 96 : 0),
+            child: Column(
+              children: [
           // ===== HEADER GOLD PANEL =====
           ValueListenableBuilder<List<LogModel>>(
             valueListenable: _controller.logsNotifier,
@@ -642,6 +687,16 @@ class _CounterViewState extends State<CounterView> {
           const Expanded(
             child: _LogListSection(),
           ),
+              ],
+            ),
+          ),
+          if (_isOffline)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _buildOfflineBanner(),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -651,6 +706,75 @@ class _CounterViewState extends State<CounterView> {
         icon: const Icon(Icons.add),
         label: const Text("Tambah"),
         elevation: 4,
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner() {
+    return SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.red.shade400, Colors.red.shade600],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withOpacity(0.28),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Offline Mode',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Tidak ada koneksi internet. Aktifkan data lalu tarik untuk refresh.',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white70, width: 1),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _refreshLogsAsync,
+                  child: const Text('Coba Lagi'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
