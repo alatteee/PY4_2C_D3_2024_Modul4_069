@@ -11,11 +11,11 @@ class OnboardingView extends StatefulWidget {
 class _OnboardingViewState extends State<OnboardingView> {
   int step = 1;
 
-  // Warna latar per halaman — cocok dengan karakter gambar 3D
+ 
   final List<Color> bgColors = [
-    const Color(0xFFFFFBF0), // hangat/krem untuk buku
-    const Color(0xFFFFFDE7), // kuning muda untuk perisai
-    const Color(0xFFFFF8E1), // amber terang untuk piala
+    const Color(0xFFFFFBF0), 
+    const Color(0xFFFFFDE7), 
+    const Color(0xFFFFF8E1), 
   ];
 
   final List<Map<String, String>> onboardingData = [

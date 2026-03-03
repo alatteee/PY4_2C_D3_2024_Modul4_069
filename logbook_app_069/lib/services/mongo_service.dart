@@ -50,7 +50,7 @@ class MongoService {
 
       _db = await Db.create(dbUri);
 
-      // Timeout 15 detik agar lebih toleran terhadap jaringan seluler
+      // Timeout 15 detik
       await _db!.open().timeout(
         const Duration(seconds: 15),
         onTimeout: () {

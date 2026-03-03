@@ -17,7 +17,7 @@ class LogController {
 
   String _currentQuery = '';
 
-  // Getter opsional untuk akses cepat list saat ini
+  // Getter 
   List<LogModel> get logs => logsNotifier.value;
 
   LogController();
@@ -77,7 +77,7 @@ class LogController {
     final oldLog = currentLogs[index];
 
     final updatedLog = LogModel(
-      id: oldLog.id, // ID harus tetap sama agar MongoDB mengenali dokumen ini
+      id: oldLog.id, // ID harus tetap sama
       title: title,
       description: desc,
       date: DateTime.now(),
@@ -142,7 +142,6 @@ class LogController {
     }
   }
 
-  // --- OPSIONAL: PERSISTENSI LOKAL (BRIDGING JSON) ---
 
   Future<void> saveToDisk() async {
     final prefs = await SharedPreferences.getInstance();
@@ -163,7 +162,6 @@ class LogController {
         source: "log_controller.dart",
         level: 1,
       );
-      // Jika ingin, di sini bisa ditambah fallback ke SharedPreferences
     }
     _syncFilteredLogs();
   }

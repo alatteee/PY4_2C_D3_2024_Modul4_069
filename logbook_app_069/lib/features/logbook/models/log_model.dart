@@ -5,7 +5,7 @@ class LogModel {
   final ObjectId? id;
   final String title;
   final String description;
-  // Simpan tanggal sebagai DateTime agar mudah diformat dan diproses
+  // Simpan tanggal sebagai DateTime 
   final DateTime date;
   final String category;
 
@@ -28,7 +28,7 @@ class LogModel {
     };
   }
 
-  // [REVERT] Untuk MongoDB: membongkar Map (BSON) menjadi objek Flutter
+  
   factory LogModel.fromMap(Map<String, dynamic> map) {
     final dynamic rawDate = map['date'];
     DateTime parsedDate;

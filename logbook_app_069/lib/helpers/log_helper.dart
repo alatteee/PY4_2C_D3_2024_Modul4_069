@@ -2,12 +2,12 @@ import 'dart:developer' as dev;
 import 'dart:io';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:intl/intl.dart'; // Tetap kita gunakan untuk presisi waktu
+import 'package:intl/intl.dart'; 
 
 class LogHelper {
   static Future<void> writeLog(
     String message, {
-    String source = "Unknown", // Menandakan file/proses asal
+    String source = "Unknown", 
     int level = 2,
   }) async {
     // 1. Filter Konfigurasi (ENV)
@@ -29,7 +29,7 @@ class LogHelper {
         message: message,
       );
 
-      // 3. Output ke Console HANYA saat LOG_LEVEL=3 (sesuai Task 4)
+      // 3. Output ke Console HANYA saat LOG_LEVEL=3 
       if (configLevel == 3) {
         final timestamp = DateFormat('HH:mm:ss').format(now);
         final color = _getColor(level);
