@@ -1,6 +1,8 @@
 // main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 
 import 'package:logbook_app_069/features/onboarding/onboarding_view.dart';
 import 'package:logbook_app_069/helpers/log_helper.dart';
@@ -18,6 +20,10 @@ Future<void> main() async {
       source: "main.dart",
       level: 2,
     );
+
+    // 1b. Locale Indonesia untuk formatting timestamp
+    Intl.defaultLocale = 'id_ID';
+    await initializeDateFormatting('id_ID', null);
 
     // 2. Lakukan handshake dengan MongoDB Atlas
     await MongoService().connect();

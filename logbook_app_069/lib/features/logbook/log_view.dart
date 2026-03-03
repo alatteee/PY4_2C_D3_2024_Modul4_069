@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:logbook_app_069/features/logbook/log_controller.dart';
 import 'package:logbook_app_069/features/logbook/models/log_model.dart';
 import 'package:logbook_app_069/features/onboarding/onboarding_view.dart';
 import 'package:logbook_app_069/helpers/log_helper.dart';
 import 'package:logbook_app_069/services/mongo_service.dart';
 
-// Warna tema utama (Gold/Amber) agar matching dengan onboarding
 const kPrimary = Color(0xFFF59E0B);
 const kPrimaryDark = Color(0xFFD97706);
 const kPrimaryLight = Color(0xFFFFFBEB);
@@ -52,6 +52,51 @@ class _CounterViewState extends State<CounterView> {
 
   static const Duration _kMinLoadingDebug = Duration(seconds: 2);
 
+  String _formatIndonesianTimestamp(DateTime dateTime) {
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+
+    if (diff.isNegative) {
+      return DateFormat('d MMM yyyy', 'id_ID').format(dateTime);
+    }
+
+    if (diff.inSeconds < 45) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit yang lalu';
+    if (diff.inHours < 24) return '${diff.inHours} jam yang lalu';
+    if (diff.inDays < 7) return '${diff.inDays} hari yang lalu';
+
+    return DateFormat('d MMM yyyy', 'id_ID').format(dateTime);
+  }
+
+  String _friendlyCloudError(Object? error) {
+    final raw = (error ?? '').toString();
+    final lower = raw.toLowerCase();
+
+    if (lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('connection refused') ||
+        lower.contains('no address associated') ||
+        lower.contains('connection reset')) {
+      return 'Koneksi internet terputus atau tidak stabil. Aktifkan internet lalu coba lagi.';
+    }
+
+    if (lower.contains('timeout') || lower.contains('timed out')) {
+      return 'Koneksi ke server terlalu lama (timeout). Coba lagi atau ganti jaringan.';
+    }
+
+    return 'Tidak bisa terhubung ke Cloud saat ini. Coba lagi beberapa saat.';
+  }
+
+  Future<void> _refreshLogsAsync() async {
+    _refreshLogs();
+    try {
+      await _logsFuture;
+    } catch (_) {
+      // Error state ditangani oleh FutureBuilder
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,7 +118,6 @@ class _CounterViewState extends State<CounterView> {
     try {
       final logs = await MongoService().getLogs();
 
-      // Update state reaktif (header/search) tanpa mengubah struktur UI besar
       _controller.logsNotifier.value = logs;
       _controller.searchLog(_currentQuery);
 
@@ -92,8 +136,7 @@ class _CounterViewState extends State<CounterView> {
       );
       rethrow;
     } finally {
-      // Agar loading state terlihat saat demo/screenshot (Task 3),
-      // tahan minimal durasi tertentu di mode debug, meskipun fetch sangat cepat.
+      
       if (kDebugMode) {
         final remaining = _kMinLoadingDebug - stopwatch.elapsed;
         if (!remaining.isNegative) {
@@ -356,14 +399,38 @@ class _CounterViewState extends State<CounterView> {
                               confirmText: "Ya, Update",
                               confirmColor: Colors.blue[400],
                             )) {
-                              _controller.updateLog(editIndex, title, content, selectedCategory);
-                              _titleController.clear(); _contentController.clear();
-                              _showStatusPopup("Catatan berhasil diupdate!", icon: Icons.edit_rounded, color: Colors.blue);
+                              try {
+                                await _controller.updateLog(editIndex, title, content, selectedCategory);
+                                _refreshLogs();
+                                _titleController.clear();
+                                _contentController.clear();
+                                _showStatusPopup(
+                                  "Catatan berhasil diupdate!",
+                                  icon: Icons.edit_rounded,
+                                  color: Colors.blue,
+                                );
+                              } catch (e) {
+                                _showStatusPopup(
+                                  _friendlyCloudError(e),
+                                  icon: Icons.wifi_off_rounded,
+                                  color: Colors.red[600],
+                                );
+                              }
                             }
                           } else {
-                            _controller.addLog(title, content, selectedCategory);
-                            _titleController.clear(); _contentController.clear();
-                            _showStatusPopup("Catatan berhasil ditambahkan!");
+                            try {
+                              await _controller.addLog(title, content, selectedCategory);
+                              _refreshLogs();
+                              _titleController.clear();
+                              _contentController.clear();
+                              _showStatusPopup("Catatan berhasil ditambahkan!");
+                            } catch (e) {
+                              _showStatusPopup(
+                                _friendlyCloudError(e),
+                                icon: Icons.wifi_off_rounded,
+                                color: Colors.red[600],
+                              );
+                            }
                           }
                         },
                         child: Text(isEdit ? "Update" : "Simpan", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
@@ -615,73 +682,109 @@ class _LogListSection extends StatelessWidget {
 
         // 2. Error State
         if (snapshot.hasError) {
-          return Center(
-            child: Padding(
+          final message = state._friendlyCloudError(snapshot.error);
+          return RefreshIndicator(
+            color: kPrimary,
+            onRefresh: state._refreshLogsAsync,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Gagal mengambil data dari Cloud.\n${snapshot.error}",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: kTextGrey),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: state._refreshLogs,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text("Coba Lagi"),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        // 3. Data kosong (sesuai kriteria: muncul pesan "Data Kosong")
-        final fetched = snapshot.data ?? const <LogModel>[];
-        if (fetched.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
-                const Text("Data Kosong"),
-                const SizedBox(height: 4),
-                Text("Belum ada catatan di Cloud.", style: TextStyle(color: kTextGrey)),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () => state._showLogDialog(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
+                const SizedBox(height: 120),
+                Column(
+                  children: [
+                    Icon(Icons.wifi_off_rounded, size: 64, color: Colors.grey[600]),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Offline Mode Warning',
+                      style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  child: const Text("Buat Catatan Pertama"),
+                    const SizedBox(height: 8),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: kTextGrey),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: state._refreshLogs,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPrimary,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Coba Lagi'),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tarik ke bawah untuk refresh.',
+                      style: TextStyle(color: kTextGrey, fontSize: 12),
+                    ),
+                  ],
                 ),
               ],
             ),
           );
         }
 
-        // 4. Jika data sudah ada, render list seperti biasa (tetap support search)
+        // 3. Data kosong 
+        final fetched = snapshot.data ?? const <LogModel>[];
+        if (fetched.isEmpty) {
+          return RefreshIndicator(
+            color: kPrimary,
+            onRefresh: state._refreshLogsAsync,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const SizedBox(height: 140),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      const Text("Data Kosong"),
+                      const SizedBox(height: 4),
+                      Text("Belum ada catatan di Cloud.", style: TextStyle(color: kTextGrey)),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => state._showLogDialog(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                        ),
+                        child: const Text("Buat Catatan Pertama"),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tarik ke bawah untuk refresh.',
+                        style: TextStyle(color: kTextGrey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // 4. Jika data sudah ada, render list seperti biasa
         return ValueListenableBuilder<List<LogModel>>(
           valueListenable: state._controller.filteredLogs,
           builder: (context, currentLogs, child) {
-            return ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-              itemCount: currentLogs.length,
-              itemBuilder: (context, index) {
-                final log = currentLogs[index];
+            return RefreshIndicator(
+              color: kPrimary,
+              onRefresh: state._refreshLogsAsync,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                itemCount: currentLogs.length,
+                itemBuilder: (context, index) {
+                  final log = currentLogs[index];
             final cat = _catLookup(log.category);
             final color = cat['color'] as Color;
             final actualIndex = state._controller.logsNotifier.value.indexWhere(
@@ -827,6 +930,15 @@ class _LogListSection extends StatelessWidget {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  state._formatIndonesianTimestamp(log.date),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: kTextGrey.withOpacity(0.85),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -876,8 +988,9 @@ class _LogListSection extends StatelessWidget {
                   ),
                 ),
               ),
-            );
-              },
+                  );
+                },
+              ),
             );
           },
         );

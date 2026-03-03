@@ -96,7 +96,7 @@ class MongoService {
         source: _source,
         level: 1,
       );
-      return [];
+      rethrow;
     }
   }
 
